@@ -77,4 +77,67 @@ SELECT
     r.provider_name,
     r.added_date,
     r.last_claim_date,
-    DATEDIFF(CURRENT
+    DATEDIFF(CURRENT_DATE, r.last_claim_date) AS days_since_claim
+FROM reference.providers r
+LEFT JOIN eligibility_npis e ON r.npi = e.npi
+WHERE e.npi IS NULL
+  AND r.status = 'ACTIVE'  -- Still marked active in our system
+ORDER BY r.last_claim_date DESC;
+
+
+-- PATTERN 5: NPI Data Quality Issues
+-- Find NPIs with mismatched data across systems
+
+SELECT 
+    r.npi,
+    r.provider_name AS ref_name,
+    c.provider_name AS crm_name,
+    r.specialty AS ref_specialty,
+    c.specialty AS crm_specialty,
+    CASE 
+        WHEN r.provider_name != c.provider_name THEN 'Name Mismatch'
+        WHEN r.specialty != c.specialty THEN 'Specialty Mismatch'
+        ELSE 'Unknown'
+    END AS issue_type
+FROM reference.providers r
+JOIN crm.providers c ON r.npi = c.npi
+WHERE r.provider_name != c.provider_name
+   OR r.specialty != c.specialty;
+
+
+-- PATTERN 6: Summary Dashboard
+-- High-level view for management reporting
+
+SELECT 
+    'Total Unique NPIs' AS metric,
+    COUNT(DISTINCT COALESCE(e.npi, r.npi, c.npi)) AS value
+FROM eligibility_npis e
+FULL OUTER JOIN reference.providers r ON e.npi = r.npi
+FULL OUTER JOIN crm.providers c ON COALESCE(e.npi, r.npi) = c.npi
+
+UNION ALL
+
+SELECT 
+    'Missing from Reference' AS metric,
+    COUNT(*) AS value
+FROM eligibility_npis e
+LEFT JOIN reference.providers r ON e.npi = r.npi
+WHERE r.npi IS NULL
+
+UNION ALL
+
+SELECT 
+    'Missing from CRM' AS metric,
+    COUNT(*) AS value
+FROM eligibility_npis e
+LEFT JOIN crm.providers c ON e.npi = c.npi
+WHERE c.npi IS NULL
+
+UNION ALL
+
+SELECT 
+    'Fully Reconciled' AS metric,
+    COUNT(*) AS value
+FROM eligibility_npis e
+JOIN reference.providers r ON e.npi = r.npi
+JOIN crm.providers c ON e.npi = c.npi;
