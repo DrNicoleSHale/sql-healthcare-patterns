@@ -159,4 +159,17 @@ FROM office_metrics;
 --   ROW_NUMBER: 1, 2, 3, 4...  (arbitrary tiebreaker)
 
 
--- PATTERN 9: Quartile/Percentile
+-- PATTERN 9: Quartile/Percentile Analysis
+-- Segment patients or offices into performance tiers
+
+SELECT 
+    office_name,
+    capture_rate,
+    NTILE(4) OVER (ORDER BY capture_rate DESC) AS quartile,
+    CASE NTILE(4) OVER (ORDER BY capture_rate DESC)
+        WHEN 1 THEN 'Top 25%'
+        WHEN 2 THEN 'Above Average'
+        WHEN 3 THEN 'Below Average'
+        WHEN 4 THEN 'Bottom 25%'
+    END AS tier
+FROM office_metrics;
